@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>創意遊戲設計王 - 10關日曆挑戰 (圖片版)</title>
+  <style>
+    :root { 
+      --primary: #4fc3f7; 
+      --bg: #fffde7; 
+      --correct: #4caf50; 
+      --wrong: #f44336;
+    }
+    body { 
+      font-family: 'Microsoft JhengHei', sans-serif; 
+      background: var(--bg); 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      min-height: 100vh; 
+      margin: 0; 
+      overflow: hidden;
+    }
+    .game-box { 
+      background: white; 
+      width: 90%; 
+      max-width: 480px; 
+      padding: 20px; 
+      border-radius: 30px; 
+      border: 8px solid var(--primary); 
+      box-shadow: 0 10px 0 #b3e5fc; 
+      text-align: center;
+    }
+    .progress-container {
+      width: 100%; height: 10px; background: #eee; border-radius: 5px; margin-bottom: 15px; overflow: hidden;
+    }
+    #progress-bar { width: 0%; height: 100%; background: var(--primary); transition: width 0.3s; }
+    
+    #level-info { font-size: 1rem; color: #888; margin-bottom: 5px; }
+    
+    /* 圖片容器樣式 */
+    .image-container {
+      width: 250px;
+      height: 300px;
+      margin: 10px auto;
+      border: 3px dashed #ccc;
+      border-radius: 15px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #f9f9f9;
+      overflow: hidden;
+    }
+    #calendar-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    .options-area { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+    .option { 
+      padding: 18px 10px; font-size: 24px; font-weight: bold; border: none;
+      border-radius: 20px; cursor: pointer; background: #fff176;
+      box-shadow: 0 6px 0 #fbc02d; transition: 0.1s;
+    }
+    .option:active { transform: translateY(3px); box-shadow: none; }
+    .option:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    #feedback { margin-top: 15px; font-size: 22px; min-height: 30px; font-weight: bold; }
+    #star-container { margin-top: 10px; display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; min-height: 40px; }
+    
+    /* 動畫效果 */
+    .bounce { animation: bounce 0.6s; }
+    .shake { animation: shake 0.5s; }
+    @keyframes bounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+    .star-pop { font-size: 25px; animation: starPop 0.4s ease-out; }
+    @keyframes starPop {
+      0% { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="game-box">
+  <div id="level-info">準備中...</div>
+  <div class="progress-container"><div id="progress-bar"></div></div>
+  
+  <p style="margin: 0; font-weight: bold; color: #555;">看圖片，這是「幾月」？</p>
+  
+  <div class="image-container">
+    <img id="calendar-img" src="" alt="">
+  </div>
+  
+  <div class="options-area" id="options"></div>
+  <div id="feedback"></div>
+  <div id="star-container"></div>
+</div>
+
+<script>
+  function speak(text) {
+    const msg = new SpeechSynthesisUtterance();
+    msg.text = text;
+    msg.lang = 'zh-TW';
+    msg.rate = 0.85;
+    window.speechSynthesis.speak(msg);
+  }
+
+  // 設定 12 個月份及其對應的圖片路徑
+  // 老師請注意：請將 "month1.jpg" 等更換為您實際的圖片檔案名稱
+  const monthPool = [
+    { name: "1月", img: "month1.png" },
+    { name: "2月", img: "month2.png" },
+    { name: "3月", img: "month3.png" },
+    { name: "4月", img: "month4.png" },
+    { name: "5月", img: "month5.png" },
+    { name: "6月", img: "month6.png" },
+    { name: "7月", img: "month7.png" },
+    { name: "8月", img: "month8.png" },
+    { name: "9月", img: "month9.png" },
+    { name: "10月", img: "month10.png" },
+    { name: "11月", img: "month11.png" },
+    { name: "12月", img: "month12.png" }
+  ];
+
+  // 隨機選出 10 個不重複的月份
+  const selectedLevels = [...monthPool].sort(() => Math.random() - 0.5).slice(0, 10);
+  
+  const levelData = selectedLevels.map(m => {
+    let wrongOpt;
+    do {
+      wrongOpt = monthPool[Math.floor(Math.random() * 12)].name;
+    } while (wrongOpt === m.name);
+    
+    return { 
+      img: m.img, 
+      answer: m.name, 
+      options: [m.name, wrongOpt].sort(() => Math.random() - 0.5) 
+    };
+  });
+
+  let currentStep = 0;
+  let score = 0;
+
+  function initLevel() {
+    if (currentStep >= levelData.length) {
+      showFinalResult();
+      return;
+    }
+
+    const data = levelData[currentStep];
+    const imgEl = document.getElementById("calendar-img");
+    
+    document.getElementById("level-info").textContent = `第 ${currentStep + 1} / 10 關`;
+    document.getElementById("progress-bar").style.width = `${(currentStep / 10) * 100}%`;
+    
+    // 更換圖片並重置動畫
+    imgEl.src = data.img;
+    imgEl.className = "bounce"; 
+    
+    document.getElementById("feedback").textContent = "";
+    speak("這是幾月？");
+
+    const optDiv = document.getElementById("options");
+    optDiv.innerHTML = "";
+    
+    data.options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.className = "option";
+      btn.textContent = opt;
+      btn.onclick = () => check(opt, btn);
+      optDiv.appendChild(btn);
+    });
+  }
+
+  function check(choice, btn) {
+    const data = levelData[currentStep];
+    const fb = document.getElementById("feedback");
+    const imgEl = document.getElementById("calendar-img");
+    
+    const btns = document.querySelectorAll('.option');
+    btns.forEach(b => b.disabled = true);
+
+    speak(choice);
+
+    if (choice === data.answer) {
+      fb.style.color = "var(--correct)";
+      fb.textContent = "太棒了！答對了 🌟";
+      imgEl.style.transform = "scale(1.1)";
+      score++;
+      addStar();
+      speak("答對了");
+    } else {
+      fb.style.color = "var(--wrong)";
+      fb.textContent = `這是 ${data.answer} 哦！`;
+      imgEl.classList.add("shake");
+      speak(`不對喔，這是 ${data.answer}`);
+    }
+
+    currentStep++;
+    setTimeout(() => {
+      imgEl.style.transform = "scale(1)";
+      imgEl.classList.remove("shake", "bounce");
+      initLevel();
+    }, 2000);
+  }
+
+  function addStar() {
+    const span = document.createElement("span");
+    span.className = "star-pop";
+    span.textContent = "⭐";
+    document.getElementById("star-container").appendChild(span);
+  }
+
+  function showFinalResult() {
+    speak(`挑戰完成，你獲得了 ${score} 顆星星，真的非常優秀！`);
+    const box = document.querySelector(".game-box");
+    box.innerHTML = `
+      <h1 style="font-size: 60px; margin: 10px 0;">🎊</h1>
+      <h2>闖關挑戰成功！</h2>
+      <p style="font-size: 20px; color: #666;">你一共收集了 ${score} 個星星獎勵</p>
+      <div id="star-container" style="margin-bottom: 20px; font-size: 24px;">${"⭐".repeat(score)}</div>
+      <button class="option" style="width:100%" onclick="location.reload()">再玩一次</button>
+    `;
+  }
+
+  window.onload = initLevel;
+</script>
+
+</body>
+</html>
